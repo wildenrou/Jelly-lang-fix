@@ -4,9 +4,11 @@
 
 Give French-original films and shows their French titles and summaries. Runs natively from Jellyfin's Scheduled Tasks or the plugin's **Run with saved settings** button. No API key, Python runtime, Docker sidecar, or external scheduler is needed on your server.
 
-**Version 1.0.1.0 — diagnostic beta.** Unchanged items are hidden from reports, summary-only updates no longer appear as renames, and failed verification now records the exact fields and expected/actual values. A real-library read-back mismatch reported with 1.0.0 remains under investigation; this update improves diagnosis and does not claim to resolve its cause. Verification still stops the batch immediately. Start with preview and a small batch before scheduling apply.
+**Version 1.0.2.0 — beta.** Fixes a reproduced false verification failure when Jellyfin reads the same image entries back in a different order. Added, removed, replaced, or retyped image references still fail verification. The comparison does not rearrange or change artwork. Existing completion history is retained. Unchanged items stay hidden from reports, and summary-only updates do not appear as renames.
 
-[Download for manual installation](https://raw.githubusercontent.com/wildenrou/Jelly-lang-fix/main/dist/FrenchOriginals-1.0.1-jellyfin12.zip) · [Changes](CHANGELOG.md) · [Validation](VALIDATION.md) · [Source](https://github.com/wildenrou/Jelly-lang-fix) · [Report an issue](https://github.com/wildenrou/Jelly-lang-fix/issues)
+A real-library failure has been narrowed to `Images`, but its expected/actual image lists have not yet been supplied. This release fixes the proven ordering defect; a missing-file reference removed by Jellyfin or another actual image change still requires investigation. Start with preview and a small batch before scheduling apply.
+
+[Download for manual installation](https://raw.githubusercontent.com/wildenrou/Jelly-lang-fix/main/dist/FrenchOriginals-1.0.2-jellyfin12.zip) · [Changes](CHANGELOG.md) · [Validation](VALIDATION.md) · [Source](https://github.com/wildenrou/Jelly-lang-fix) · [Report an issue](https://github.com/wildenrou/Jelly-lang-fix/issues)
 
 ## Install from the Jellyfin catalog
 
@@ -24,7 +26,7 @@ If a manual installation shows **“An error occurred while getting the plugin d
 
 1. Disable any older French-metadata script schedule so both tools do not work on the same items.
 2. Stop the Jellyfin container and back up its persistent appdata/config directory. If you use NFO saving, include the affected NFO files in your backup: Jellyfin's normal metadata savers can update them.
-3. Extract `FrenchOriginals-1.0.1-jellyfin12.zip`. Copy the **entire `FrenchOriginals_1.0.1.0` folder** into Jellyfin's existing **plugins** directory. When upgrading, remove the old plugin-version folder, keeping the plugin configuration and the `FrenchOriginals` data/journals folder. Do not copy the source ZIP, build dependencies, or the test provider there.
+3. Extract `FrenchOriginals-1.0.2-jellyfin12.zip`. Copy the **entire `FrenchOriginals_1.0.2.0` folder** into Jellyfin's existing **plugins** directory. When upgrading, remove the old plugin-version folder, keeping the plugin configuration and the `FrenchOriginals` data/journals folder. Do not copy the source ZIP, build dependencies, or the test provider there.
 4. Start Jellyfin. Open **Dashboard → Plugins → My Plugins → French Originals**.
 5. Select your Movies and TV libraries. Leave **Preview only** enabled, set **Items per run** to `5` for the first check, and save. Click **Run with saved settings**, then **Refresh report**.
 6. Review the proposed changes. For an initial apply check, use **Items per run** `1`, disable **Preview only**, save, and run again. If verification fails, inspect the named fields and the journal's `verification-failed` record before another run. Once checks on your server succeed, raise the batch size as appropriate. The default safety guard is `80` selected items.
@@ -36,7 +38,7 @@ Example resulting layout:
 
 ```text
 plugins/
-  FrenchOriginals_1.0.1.0/
+  FrenchOriginals_1.0.2.0/
     Jellyfin.Plugin.FrenchOriginals.dll
     meta.json
 ```
@@ -66,6 +68,8 @@ Completed items are fingerprinted. Subsequent runs skip them unless their releva
 Only one plugin run is allowed at a time. Processing is sequential, with a default 200 ms delay between items and a 30-second timeout per provider. The task refuses to run while a library scan or metadata refresh queue is active and stops if one starts. Run again later; completed work is recorded. Cancelling through Scheduled Tasks finishes/verifies an already-started item save, then stops before the next item.
 
 Before each write, the plugin flushes an audit record to disk, checks for concurrent edits, saves through Jellyfin's library API, and reads the stored item back. Verification failure stops subsequent writes. It never directly opens or edits the Jellyfin database. Third-party plugins can still react to Jellyfin's normal item-update events; concurrent changes cannot be made globally atomic across unrelated plugins.
+
+Image verification compares all image types and paths, including duplicate counts, in a stable order. Jellyfin can recreate database image rows during a metadata save, so their returned list order is not a reliable change signal. Actual image-reference differences still stop the batch. The plugin does not restore missing images or suppress changes to their paths or types.
 
 ## Reports and recovery
 
@@ -98,7 +102,7 @@ python3 package.py
 
 The plugin references Jellyfin's official 12.0.0 NuGet packages. Its ZIP contains only its own DLL, plugin metadata, logo, and documentation; Jellyfin supplies the framework and host assemblies. Keep the source and license alongside any redistribution. The code is licensed GPL-2.0-only, matching the bundled LICENSE.
 
-The repository contains the corresponding 1.0.1 source. The catalog also retains the original 1.0.0 binary for existing installations, with its [exact source archive](dist/FrenchOriginals-1.0.0-source.zip). The logo is original generated artwork provided with the project.
+The repository contains the corresponding 1.0.2 source. Previous sources remain available in Git history, including [1.0.1](https://github.com/wildenrou/Jelly-lang-fix/tree/84eea2b67bdb14f175e806a49ec028d2d6e8f8ba). The catalog also retains the original 1.0.0 binary for existing installations, with its [exact source archive](dist/FrenchOriginals-1.0.0-source.zip). The logo is original generated artwork provided with the project.
 
 The integration fixture under `tests/SmokeProvider` is for disposable test servers only. It returns synthetic French text and must **never** be installed on a real media server. `tests/run-smoke.py` requires a fresh empty work directory and starts/stops its own server process. See the validation notes for invocation.
 

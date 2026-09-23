@@ -39,7 +39,7 @@ public static class Rules
         return matched;
     }
     public static string Hash(object value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value))));
-    public static JsonElement ProtectedMetadata(BaseItem i) => JsonSerializer.SerializeToElement(new
+    public static JsonElement ProtectedMetadata(BaseItem i, bool canonicalImageOrder = true) => JsonSerializer.SerializeToElement(new
     {
         i.Id, Type = i.GetType().Name, i.ParentId, i.OriginalTitle, i.OriginalLanguage, i.ForcedSortName,
         i.PreferredMetadataCountryCode, i.IsLocked, Locks = i.LockedFields.OrderBy(x => x).ToArray(),
@@ -47,12 +47,20 @@ public static class Rules
         i.OfficialRating, i.CustomRating, i.CommunityRating, i.CriticRating, i.ProductionYear,
         i.PremiereDate, i.EndDate, i.IndexNumber, i.ParentIndexNumber, i.RunTimeTicks,
         i.Genres, i.Tags, i.Studios, i.ProductionLocations, i.Path,
-        Images = i.ImageInfos.Select(x => new { x.Path, x.Type }).ToArray()
+        // Jellyfin recreates image row IDs during a save and does not guarantee retrieval
+        // order. Protect every (type, path), including duplicates, independently of that
+        // incidental order. Never sort or mutate the item's actual ImageInfos array.
+        Images = (canonicalImageOrder
+            ? i.ImageInfos.OrderBy(x => x.Type).ThenBy(x => x.Path, StringComparer.Ordinal)
+            : i.ImageInfos.AsEnumerable()).Select(x => new { x.Path, x.Type }).ToArray()
     });
-    public static string ProtectedFingerprint(BaseItem i) => Hash(ProtectedMetadata(i));
-    public static ItemSnapshot Snapshot(BaseItem item) => new(item.Id, item.Name, item.Overview,
-        item.PreferredMetadataLanguage, ProtectedFingerprint(item));
-    public static string CompletionKey(BaseItem item, bool updateText) => Hash(new { Snapshot = Snapshot(item), UpdateText = updateText });
+    public static string ProtectedFingerprint(BaseItem i, bool canonicalImageOrder = true) => Hash(ProtectedMetadata(i, canonicalImageOrder));
+    public static ItemSnapshot Snapshot(BaseItem item, bool canonicalImageOrder = true) => new(item.Id, item.Name, item.Overview,
+        item.PreferredMetadataLanguage, ProtectedFingerprint(item, canonicalImageOrder));
+    public static string CompletionKey(BaseItem item, bool updateText, bool canonicalImageOrder = true) =>
+        Hash(new { Snapshot = Snapshot(item, canonicalImageOrder), UpdateText = updateText });
+    public static bool IsComplete(BaseItem item, bool updateText, string? fingerprint) => fingerprint is not null &&
+        (fingerprint == CompletionKey(item, updateText) || fingerprint == CompletionKey(item, updateText, canonicalImageOrder: false));
     public static void Verify(ItemSnapshot before, JsonElement protectedBefore, TextChange proposed, BaseItem? actual)
     {
         List<MetadataDifference> differences = [];

@@ -26,7 +26,7 @@ if not dll.is_file():
 logo = root / 'assets/french-originals-logo.png'
 repo_url = 'https://raw.githubusercontent.com/wildenrou/Jelly-lang-fix/' + args.package_ref
 description = ('French titles and summaries for French-original films and television. '
-               'Diagnostic beta: a reported real-library read-back mismatch remains under investigation. '
+               'Beta: corrects false verification failures from image-list ordering while retaining artwork checks. '
                'Start in preview mode; verification failures stop the batch.')
 manifest = {
     'category': 'Metadata', 'guid': '8a18225a-22b8-4e18-9921-b8f1b5900bbc',
@@ -80,11 +80,14 @@ def catalog_version(number, path, changelog, timestamp):
     }
 
 
+existing_catalog = root / 'manifest.json'
+previous_versions = json.loads(existing_catalog.read_text())[0]['versions'] if existing_catalog.is_file() else []
 versions = [catalog_version(version, catalog_zip,
-    'Diagnostic beta. Hide unchanged report rows; identify title, summary, and language changes; '
-    'journal exact expected/actual verification differences. The reported server mismatch is not yet confirmed fixed.',
+    'Fix false Images verification failures caused by reordered image rows. '
+    'Retain checks for actual artwork changes, preserve completion history, and keep unchanged report rows hidden.',
     manifest['timestamp'])]
-if legacy_zip.is_file():
+versions.extend(v for v in previous_versions if v['version'] != version)
+if legacy_zip.is_file() and not any(v['version'] == '1.0.0.0' for v in versions):
     versions.append(catalog_version('1.0.0.0', legacy_zip,
         'Initial beta. A reported read-back mismatch remains under investigation. '
         'Use 1.0.1 or later for detailed verification diagnostics.', '2026-09-22T00:00:00Z'))
@@ -92,7 +95,7 @@ catalog = [{key: manifest[key] for key in ['guid', 'name', 'overview', 'descript
 catalog[0].update(imageUrl=f'{repo_url}/assets/{logo.name}', versions=versions)
 (root / 'manifest.json').write_text(json.dumps(catalog, indent=2) + '\n')
 
-packages = [catalog_zip, manual_zip] + ([legacy_zip] if legacy_zip.is_file() else [])
+packages = sorted(dist.glob('*.zip'))
 (dist / 'SHA256SUMS.txt').write_text(''.join(
     hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + path.name + '\n' for path in packages))
 source = out / f'FrenchOriginals-{short_version}-source.zip'

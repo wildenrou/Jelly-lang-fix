@@ -1,5 +1,16 @@
 # Validation — French Originals
 
+## Version 1.0.2.0 — 2026-09-23 UTC
+
+- **39/39 safety and reporting tests passed**, using the official Jellyfin 12.0.0 entity types and .NET SDK 10.0.401. The five added image regressions cover order-independent fingerprints without mutation, successful verified saves after image reordering, repeat-run idempotence, retained legacy completion history, and detection of real artwork changes. One case independently exercises removal, addition, replacement, type change, case change, and duplicate addition; each still stops after one write without a completion marker.
+- Reproduction: the same image `(Type, Path)` entries in a different sequence produce different fingerprints with the 1.0.1 algorithm, while 1.0.2 accepts them. No actual image list is reordered by the comparison.
+- DLL SHA-256: `00140d5b9f01b4d29ad8d0a9aac8c3f3e440536dcf10bdca92e4d84ffc1183b9`.
+- The configuration page is unchanged from the tested 1.0.1 build. Full native-server integration was not rerun for this release.
+
+Upstream evidence from Jellyfin v12.1: [ItemPersistenceService.SaveImagesAsync](https://github.com/jellyfin/jellyfin/blob/v12.1/Jellyfin.Server.Implementations/Item/ItemPersistenceService.cs) deletes/reinserts image records; [BaseItemMapper.MapImageToEntity](https://github.com/jellyfin/jellyfin/blob/v12.1/Jellyfin.Server.Implementations/Item/BaseItemMapper.cs) gives them new random IDs, and mapping reads image enumeration order directly; [RetrieveItem](https://github.com/jellyfin/jellyfin/blob/v12.1/Jellyfin.Server.Implementations/Item/BaseItemRepository.Querying.cs) includes images without an explicit image-order contract. [BaseItem.ValidateImages](https://github.com/jellyfin/jellyfin/blob/v12.1/MediaBrowser.Controller/Entities/BaseItem.cs) can also remove missing local-image references during a normal metadata save; this is a real reference change and still fails verification.
+
+The user's report identifies `Images` but omits its expected/actual lists. These tests prove the ordering correction, not that the reported film's mismatch was exclusively ordering. No production-server changes or live provider checks were performed here.
+
 ## Version 1.0.1.0 — 2026-09-23 UTC
 
 - Release assembly compiled with .NET SDK **10.0.401**, targeting **net10.0**, using the locked official Jellyfin **12.0.0** NuGet dependencies. Warnings are treated as errors.

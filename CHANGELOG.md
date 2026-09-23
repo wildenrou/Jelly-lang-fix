@@ -1,5 +1,14 @@
 # Changes
 
+## 1.0.2.0 — 2026-09-23 — beta
+
+- Fix false `Images` verification and concurrent-edit failures caused solely by image-list ordering. Jellyfin recreates image row IDs during saves and does not guarantee their read-back order.
+- Compare the same image types and paths in a stable order without mutating the item's artwork. Missing, added, replaced, retyped, case-changed, or duplicate-count changes still stop the batch.
+- Accept existing completion fingerprints, preserving progress across the upgrade. New completion fingerprints remain stable across image-order changes.
+- Retain hidden unchanged report rows, clear summary/language labels, and detailed failure journals.
+
+The image-order failure is reproduced and covered by regression tests. The reporting user's exact expected/actual image lists are still needed to distinguish that case from missing-file cleanup or another actual artwork change on their server.
+
 ## 1.0.1.0 — 2026-09-23 — diagnostic beta
 
 - Hide items that need no changes from preview and apply reports. Report refresh also filters unchanged rows from older saved reports.

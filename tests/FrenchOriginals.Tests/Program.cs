@@ -123,6 +123,53 @@ var tests = new (string Name, Func<Task> Run)[]
         using var f=new Fixture(); var m=Movie(); f.Add(m); f.Lookup.OnFetch=()=>m.Name="Manual edit";
         await f.Run(); Assert(f.Items.Writes==0 && m.Name=="Manual edit");
     }),
+    ("Image fingerprints ignore incidental row order without mutating artwork", () => Sync(() => {
+        var m=Movie(); m.ImageInfos=Images(); var original=m.ImageInfos.ToArray();
+        var fingerprint=Rules.ProtectedFingerprint(m); var legacy=Rules.ProtectedFingerprint(m,canonicalImageOrder:false);
+        Assert(m.ImageInfos.SequenceEqual(original));
+        m.ImageInfos=m.ImageInfos.Reverse().ToArray();
+        Assert(Rules.ProtectedFingerprint(m)==fingerprint);
+        Assert(Rules.ProtectedFingerprint(m,canonicalImageOrder:false)!=legacy);
+        Assert(m.ImageInfos.SequenceEqual(original.Reverse()));
+    })),
+    ("Reordered image rows verify after save and stay complete on later reads", async () => {
+        using var f=new Fixture(); var m=Movie(); m.ImageInfos=Images(); f.Add(m); f.Items.VerifyAtStore=true;
+        f.Items.OnSave=item=>item.ImageInfos=item.ImageInfos.Reverse().ToArray();
+        await f.Run(); Assert(f.Report().Changed==1 && f.Report().Status=="Completed");
+        Assert(!f.JournalEntries().Any(e=>e.GetProperty("State").GetString()=="verification-failed"));
+        m.ImageInfos=m.ImageInfos.Reverse().ToArray();
+        await f.Run(); Assert(f.Items.Writes==1 && f.Lookup.Calls==1 && f.Report().AlreadyComplete==1);
+    }),
+    ("Artwork removal, addition, replacement, type, case and duplicate changes still stop the batch", async () => {
+        Action<BaseItem>[] edits=[
+            m=>m.ImageInfos=m.ImageInfos.Skip(1).ToArray(),
+            m=>m.ImageInfos=[..m.ImageInfos,new ItemImageInfo {Path="/art/extra.jpg",Type=ImageType.Backdrop}],
+            m=>m.ImageInfos[0].Path="/art/replaced.jpg",
+            m=>m.ImageInfos[0].Type=ImageType.Banner,
+            m=>m.ImageInfos[0].Path=m.ImageInfos[0].Path.ToUpperInvariant(),
+            m=>m.ImageInfos=[..m.ImageInfos,m.ImageInfos[0]]
+        ];
+        foreach(var edit in edits)
+        {
+            using var f=new Fixture(); var first=Movie(); first.ImageInfos=Images(); var second=Movie(); second.ImageInfos=Images();
+            f.Add(first); f.Add(second); f.Items.OnSave=edit; f.Items.VerifyAtStore=true;
+            await Throws<MetadataVerificationException>(()=>f.Run());
+            Assert(f.Items.Writes==1 && f.State.LoadCompleted().Count==0 && f.Report().Items.Single().Detail!.Contains("Fields: Images"));
+        }
+    }),
+    ("Existing completion history remains valid after upgrading image fingerprints", async () => {
+        using var f=new Fixture(); var m=Movie(); m.ImageInfos=Images(); f.Add(m);
+        var legacy=Rules.CompletionKey(m,true,canonicalImageOrder:false);
+        Assert(legacy!=Rules.CompletionKey(m,true));
+        f.State.SaveCompleted(new(){{m.Id,new(legacy,DateTime.UtcNow)}});
+        await f.Run(); Assert(f.Lookup.Calls==0 && f.Items.Writes==0 && f.Report().AlreadyComplete==1);
+    }),
+    ("Legacy completion compatibility never hides a real artwork change", async () => {
+        using var f=new Fixture(); var m=Movie(); m.ImageInfos=Images(); f.Add(m);
+        f.State.SaveCompleted(new(){{m.Id,new(Rules.CompletionKey(m,true,canonicalImageOrder:false),DateTime.UtcNow)}});
+        m.ImageInfos[0].Path="/art/new-poster.jpg";
+        await f.Run(); Assert(f.Lookup.Calls==1 && f.Items.Writes==1 && f.Report().AlreadyComplete==0);
+    }),
     ("Unrelated metadata change fails verification and stops later writes", async () => {
         using var f=new Fixture(); f.Add(Movie()); f.Add(Movie()); f.Items.OnSave=m=>m.CustomRating="unexpected";
         await Throws<InvalidOperationException>(()=>f.Run()); Assert(f.Items.Writes==1 && f.State.LoadCompleted().Count==0);
@@ -204,6 +251,11 @@ static Task Sync(Action action) {action();return Task.CompletedTask;}
 static async Task Throws<T>(Func<Task> action) where T:Exception {try {await action();}catch(T){return;}throw new Exception("Expected " + typeof(T).Name);}
 static void ThrowsSync(Action action) {try{action();}catch(InvalidOperationException){return;}throw new Exception("Expected configuration rejection");}
 static Movie Movie(string? lang="fr") => new() { Id=Guid.NewGuid(),Name="English title",Overview="English overview",OriginalLanguage=lang!,PreferredMetadataLanguage="en",ProviderIds=new(StringComparer.OrdinalIgnoreCase){{"Tmdb","12345"}} };
+static ItemImageInfo[] Images() => [
+    new() { Path="/art/backdrop-z.jpg",Type=ImageType.Backdrop },
+    new() { Path="/art/poster.jpg",Type=ImageType.Primary },
+    new() { Path="/art/backdrop-a.jpg",Type=ImageType.Backdrop }
+];
 
 sealed class Fixture : IDisposable
 {

@@ -34,7 +34,7 @@ public sealed class MetadataTaskService(IItemStore items, ITextLookup lookup, St
                 { report.Skipped++; continue; }
                 if ((!options.UpdateText && Rules.IsFrench(item.PreferredMetadataLanguage)) ||
                     (!options.RecheckCompleted && completed.TryGetValue(work.Id, out var entry) &&
-                    entry.Fingerprint == Rules.CompletionKey(item, options.UpdateText)))
+                    Rules.IsComplete(item, options.UpdateText, entry.Fingerprint)))
                 { report.AlreadyComplete++; continue; }
                 candidates.Add(work);
             }
