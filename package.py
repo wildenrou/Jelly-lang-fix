@@ -26,7 +26,7 @@ if not dll.is_file():
 logo = root / 'assets/french-originals-logo.png'
 repo_url = 'https://raw.githubusercontent.com/wildenrou/Jelly-lang-fix/' + args.package_ref
 description = ('French titles and summaries for French-original films and television. '
-               'Beta: corrects false verification failures from image-list ordering while retaining artwork checks. '
+               'Beta: skips items with unavailable local artwork before saving and continues the batch. '
                'Start in preview mode; verification failures stop the batch.')
 manifest = {
     'category': 'Metadata', 'guid': '8a18225a-22b8-4e18-9921-b8f1b5900bbc',
@@ -83,8 +83,8 @@ def catalog_version(number, path, changelog, timestamp):
 existing_catalog = root / 'manifest.json'
 previous_versions = json.loads(existing_catalog.read_text())[0]['versions'] if existing_catalog.is_file() else []
 versions = [catalog_version(version, catalog_zip,
-    'Fix false Images verification failures caused by reordered image rows. '
-    'Retain checks for actual artwork changes, preserve completion history, and keep unchanged report rows hidden.',
+    'Skip items with missing or inaccessible local artwork before saving; continue the batch and retry after repair. '
+    'Show filenames in reports and full paths in audit entries. Preserve strict post-save verification and completion history.',
     manifest['timestamp'])]
 versions.extend(v for v in previous_versions if v['version'] != version)
 if legacy_zip.is_file() and not any(v['version'] == '1.0.0.0' for v in versions):

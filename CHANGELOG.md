@@ -1,5 +1,13 @@
 # Changes
 
+## 1.0.3.0 — 2026-09-23 — beta
+
+- Check local artwork before metadata saves. Missing or inaccessible image files now cause a clear, retryable item skip, while the rest of the batch continues.
+- Check during preview and again in the Jellyfin adapter before any cached text assignment or save. This prevents Jellyfin's normal missing-file cleanup from being invoked for affected items.
+- Record affected filenames in the report and full paths in `artwork-unavailable` audit entries. Skipped items rotate behind unattempted items and can update after artwork repair.
+- Keep already-matching items hidden and preserve completion history. Unexpected image changes after a save still fail strict verification.
+- Reproduce the reported eight-to-six image-reference pattern with Jellyfin's own cleanup method; add tests for the production adapter's zero-write guard, continued batches, previews, retries, and file-disappearance timing.
+
 ## 1.0.2.0 — 2026-09-23 — beta
 
 - Fix false `Images` verification and concurrent-edit failures caused solely by image-list ordering. Jellyfin recreates image row IDs during saves and does not guarantee their read-back order.

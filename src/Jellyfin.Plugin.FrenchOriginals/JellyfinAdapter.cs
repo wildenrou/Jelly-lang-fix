@@ -17,6 +17,7 @@ public interface IItemStore
     bool Busy { get; }
     IEnumerable<WorkItem> Inventory(RunOptions options, CancellationToken token);
     BaseItem? Read(Guid id);
+    void CheckCanSave(BaseItem item);
     Task Save(BaseItem expected, TextChange change, CancellationToken token);
 }
 public interface ITextLookup
@@ -29,6 +30,7 @@ public sealed class JellyfinAdapter(ILibraryManager library, IProviderManager pr
 {
     public bool Busy => library.IsScanRunning || providers.GetRefreshQueue().Count > 0;
     public BaseItem? Read(Guid id) => library.RetrieveItem(id);
+    public void CheckCanSave(BaseItem item) => ArtworkGuard.EnsureAvailable(item);
 
     public IEnumerable<WorkItem> Inventory(RunOptions options, CancellationToken token)
     {
@@ -95,6 +97,9 @@ public sealed class JellyfinAdapter(ILibraryManager library, IProviderManager pr
         var live = library.GetItemById(expected.Id) ?? throw new InvalidOperationException("Item disappeared before update.");
         if (Rules.Snapshot(persisted) != before || Rules.Snapshot(live) != before)
             throw new InvalidOperationException("Item was edited concurrently; stopping without overwriting the new values.");
+        // Recheck immediately before mutating cached fields, even if preview or the
+        // service preflight succeeded earlier. Skipping here guarantees zero writes.
+        CheckCanSave(live);
         live.PreferredMetadataLanguage = change.Language!;
         live.Name = change.Name!;
         live.Overview = change.Overview!;

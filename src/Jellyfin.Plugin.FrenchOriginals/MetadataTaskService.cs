@@ -96,6 +96,32 @@ public sealed class MetadataTaskService(IItemStore items, ITextLookup lookup, St
                 if (!complete) detail += "; incomplete text, will retry later";
                 var reportRow = new ReportRow(fresh.Id, fresh.Name, fresh.GetType().Name, action,
                     change.Name != fresh.Name ? change.Name : null, detail);
+                async Task RecordArtworkSkip(ArtworkUnavailableException ex)
+                {
+                    report.Skipped++;
+                    report.ArtworkUnavailable++;
+                    report.Add(reportRow with { Action = options.PreviewOnly ? "Would skip — artwork unavailable" : "Skipped — artwork unavailable",
+                        NewTitle = null, Detail = ex.Message });
+                    journal.Write("artwork-unavailable", new { Id = work.Id, Title = before.Name, options.PreviewOnly, Images = ex.Images });
+                    if (!options.PreviewOnly)
+                    {
+                        // Stay retryable and move behind unattempted items on the next run.
+                        completed[work.Id] = new(null, DateTime.UtcNow);
+                        state.SaveCompleted(completed);
+                    }
+                    state.SaveReport(report);
+                    progress.Report(100d * (index + 1) / Math.Max(1, selected.Count));
+                    if (options.DelayMilliseconds > 0) await Task.Delay(options.DelayMilliseconds, token).ConfigureAwait(false);
+                }
+                if (differs)
+                {
+                    try { items.CheckCanSave(fresh); }
+                    catch (ArtworkUnavailableException ex)
+                    {
+                        await RecordArtworkSkip(ex).ConfigureAwait(false);
+                        continue;
+                    }
+                }
                 if (!differs) report.NoChangeNeeded++;
                 if (options.PreviewOnly)
                     journal.Write("preview", new { Before = before, Proposed = change, Provider = text?.Provider });
@@ -112,6 +138,13 @@ public sealed class MetadataTaskService(IItemStore items, ITextLookup lookup, St
                             await items.Save(fresh, change, token).ConfigureAwait(false);
                             after = items.Read(work.Id);
                             Rules.Verify(before, protectedBefore, change, after);
+                        }
+                        catch (ArtworkUnavailableException ex)
+                        {
+                            // The store guard runs before assignment or save. A file can
+                            // disappear after the earlier service check, so retry later.
+                            await RecordArtworkSkip(ex).ConfigureAwait(false);
+                            continue;
                         }
                         catch (MetadataVerificationException ex)
                         {
@@ -140,7 +173,8 @@ public sealed class MetadataTaskService(IItemStore items, ITextLookup lookup, St
                 if (options.DelayMilliseconds > 0) await Task.Delay(options.DelayMilliseconds, token).ConfigureAwait(false);
             }
             report.Status = options.PreviewOnly ? "Preview complete" : "Completed";
-            report.Message = $"{report.Candidates} candidates; {report.Selected} selected; {report.Changed} changed; {report.Skipped} skipped; {report.AlreadyComplete} already complete; {report.NoChangeNeeded} unchanged (hidden).";
+            var artworkDetail = report.ArtworkUnavailable > 0 ? $" ({report.ArtworkUnavailable} artwork unavailable)" : "";
+            report.Message = $"{report.Candidates} candidates; {report.Selected} selected; {report.Changed} changed; {report.Skipped} skipped{artworkDetail}; {report.AlreadyComplete} already complete; {report.NoChangeNeeded} unchanged (hidden).";
             progress.Report(100);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)

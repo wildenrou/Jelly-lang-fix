@@ -127,6 +127,7 @@ public sealed class RunReport
     public int AlreadyComplete { get; set; }
     public int NoChangeNeeded { get; set; }
     public int Skipped { get; set; }
+    public int ArtworkUnavailable { get; set; }
     public List<ReportRow> Items { get; set; } = [];
     public void Add(ReportRow row) { if (Items.Count < 200) Items.Add(row); }
 }

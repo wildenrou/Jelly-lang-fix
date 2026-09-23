@@ -1,10 +1,13 @@
 using System.Text.Json;
+using System.Reflection;
 using Jellyfin.Plugin.FrenchOriginals;
 using Jellyfin.Plugin.FrenchOriginals.Configuration;
 using MediaBrowser.Controller.Entities;
 using MediaBrowser.Controller.Entities.Movies;
 using MediaBrowser.Controller.Entities.TV;
 using MediaBrowser.Model.Entities;
+using MediaBrowser.Controller.Library;
+using MediaBrowser.Controller.Providers;
 using Microsoft.Extensions.Logging.Abstractions;
 
 var tests = new (string Name, Func<Task> Run)[]
@@ -170,6 +173,88 @@ var tests = new (string Name, Func<Task> Run)[]
         m.ImageInfos[0].Path="/art/new-poster.jpg";
         await f.Run(); Assert(f.Lookup.Calls==1 && f.Items.Writes==1 && f.Report().AlreadyComplete==0);
     }),
+    ("Jellyfin cleanup reproduces the eight-to-six missing artwork reference difference", () => Sync(() => {
+        using var f=new Fixture(); var m=Movie(); f.AssignArtwork(m);
+        var original=m.ImageInfos.ToArray(); var before=Rules.Snapshot(m); var protectedBefore=Rules.ProtectedMetadata(m);
+        Assert(m.ValidateImages());
+        Assert(original.Length==8 && m.ImageInfos.Length==6);
+        Assert(original.Except(m.ImageInfos).Select(i=>System.IO.Path.GetFileName(i.Path)).Order().SequenceEqual(new[]{"fanart.jpg","logo.svg"}));
+        Assert(m.ImageInfos.All(i=>File.Exists(i.Path)));
+        ThrowsSync(()=>Rules.Verify(before,protectedBefore,new(m.PreferredMetadataLanguage,m.Name,m.Overview),m));
+    })),
+    ("Production adapter rejects unavailable artwork before changing cached metadata or calling save", async () => {
+        using var f=new Fixture(); var m=Movie(); f.AssignArtwork(m); var before=Rules.Snapshot(m);
+        var library=InterfaceStub.Make<ILibraryManager>((method,_)=>method.Name switch {
+            "get_IsScanRunning"=>false,
+            "RetrieveItem" or "GetItemById"=>m,
+            _=>throw new Exception("Unexpected library operation: "+method.Name)
+        });
+        var providers=InterfaceStub.Make<IProviderManager>((method,_)=> {
+            if(method.Name!="GetRefreshQueue")throw new Exception("Unexpected provider operation: "+method.Name);
+            var type=method.ReturnType;
+            return type.IsInterface ? Activator.CreateInstance(typeof(List<>).MakeGenericType(type.GetGenericArguments())) : Activator.CreateInstance(type);
+        });
+        var adapter=new JellyfinAdapter(library,providers,NullLogger<JellyfinAdapter>.Instance);
+        await Throws<ArtworkUnavailableException>(()=>adapter.Save(m,new("fr","Titre","Résumé"),CancellationToken.None));
+        Assert(Rules.Snapshot(m)==before && m.ImageInfos.Length==8);
+    }),
+    ("Missing artwork skips without mutation and the next item still updates", async () => {
+        using var f=new Fixture(); var blocked=Movie(); blocked.Id=Guid.Parse("00000000-0000-0000-0000-000000000001");
+        var healthy=Movie(); healthy.Id=Guid.Parse("00000000-0000-0000-0000-000000000002");
+        f.AssignArtwork(blocked); f.AssignArtwork(healthy,incomplete:false); f.Add(blocked); f.Add(healthy);
+        var original=Rules.Snapshot(blocked); f.Items.CheckImageFiles=true; f.Items.OnSave=m=>m.ValidateImages();
+        await f.Run(); var report=f.Report();
+        Assert(report.Status=="Completed" && report.ArtworkUnavailable==1 && report.Skipped==1 && report.Changed==1 && f.Items.Writes==1);
+        Assert(Rules.Snapshot(blocked)==original && blocked.ImageInfos.Length==8);
+        Assert(f.State.LoadCompleted()[blocked.Id].Fingerprint is null && f.State.LoadCompleted()[healthy.Id].Fingerprint is not null);
+        var row=report.Items.Single(r=>r.Id==blocked.Id);
+        Assert(row.Action=="Skipped — artwork unavailable" && row.NewTitle is null && row.Detail!.Contains("fanart.jpg") && row.Detail.Contains("logo.svg"));
+        var entries=f.JournalEntries();
+        Assert(!entries.Any(e=>e.GetProperty("State").GetString()=="prepared" && e.GetProperty("Data").GetProperty("Before").GetProperty("Id").GetGuid()==blocked.Id));
+        var audit=entries.Single(e=>e.GetProperty("State").GetString()=="artwork-unavailable").GetProperty("Data");
+        Assert(audit.GetProperty("Images").GetArrayLength()==2 && audit.GetProperty("Id").GetGuid()==blocked.Id);
+    }),
+    ("Preview identifies unavailable artwork without changes or completion markers", async () => {
+        using var f=new Fixture(); var m=Movie(); f.AssignArtwork(m); f.Add(m); f.Items.CheckImageFiles=true;
+        var before=Rules.Snapshot(m); await f.Run(preview:true);
+        Assert(f.Report().Status=="Preview complete" && f.Report().ArtworkUnavailable==1);
+        Assert(f.Report().Items.Single().Action=="Would skip — artwork unavailable");
+        Assert(f.Items.Writes==0 && f.State.LoadCompleted().Count==0 && Rules.Snapshot(m)==before);
+    }),
+    ("Skipped artwork remains retryable after missing files are restored", async () => {
+        using var f=new Fixture(); var m=Movie(); f.AssignArtwork(m); f.Add(m); f.Items.CheckImageFiles=true;
+        await f.Run(); Assert(f.Items.Writes==0 && f.State.LoadCompleted()[m.Id].Fingerprint is null);
+        foreach(var image in m.ImageInfos.Where(i=>!File.Exists(i.Path))) File.WriteAllText(image.Path,"fixture");
+        await f.Run(); Assert(f.Report().Changed==1 && f.Items.Writes==1 && f.State.LoadCompleted()[m.Id].Fingerprint is not null);
+    }),
+    ("Artwork skips rotate behind unattempted items with a one-item batch limit", async () => {
+        using var f=new Fixture(); var m=Movie(); m.Id=Guid.Parse("00000000-0000-0000-0000-000000000001");
+        var next=Movie(); next.Id=Guid.Parse("00000000-0000-0000-0000-000000000002");
+        f.AssignArtwork(m); f.Add(m); f.Add(next); f.Items.CheckImageFiles=true;
+        await f.Run(limit:1); Assert(f.Items.Writes==0 && f.Report().ArtworkUnavailable==1);
+        await f.Run(limit:1); Assert(f.Items.Writes==1 && f.Report().Items.Single().Id==next.Id);
+    }),
+    ("Artwork disappearing after service preflight is skipped before store assignment", async () => {
+        using var f=new Fixture(); var m=Movie(); f.AssignArtwork(m,incomplete:false); f.Add(m); f.Items.CheckImageFiles=true;
+        var before=Rules.Snapshot(m); f.Items.BeforeSave=item=>File.Delete(item.ImageInfos[0].Path);
+        await f.Run(); Assert(f.Items.Writes==0 && f.Report().ArtworkUnavailable==1 && Rules.Snapshot(m)==before);
+        Assert(f.State.LoadCompleted()[m.Id].Fingerprint is null);
+    }),
+    ("Unexpected artwork removal during a save still fails strict verification", async () => {
+        using var f=new Fixture(); var m=Movie(); f.AssignArtwork(m,incomplete:false); f.Add(m); f.Items.CheckImageFiles=true;
+        f.Items.OnSave=item=>item.ImageInfos=item.ImageInfos.Skip(1).ToArray();
+        await Throws<MetadataVerificationException>(()=>f.Run());
+        Assert(f.Items.Writes==1 && f.Report().ArtworkUnavailable==0 && f.Report().Status=="Failed" && f.State.LoadCompleted().Count==0);
+    }),
+    ("Already-matching items remain hidden even with unavailable artwork", async () => {
+        using var f=new Fixture(); var m=Movie(); m.Name="Titre français"; m.Overview="Résumé français"; m.PreferredMetadataLanguage="fr";
+        f.AssignArtwork(m); f.Add(m); f.Items.CheckImageFiles=true; await f.Run();
+        Assert(f.Items.Writes==0 && f.Report().Items.Count==0 && f.Report().NoChangeNeeded==1 && f.Report().ArtworkUnavailable==0);
+    }),
+    ("Remote image URLs are not treated as missing local files", () => Sync(() => {
+        var m=Movie(); m.ImageInfos=[new(){Path="https://example.invalid/poster.jpg",Type=ImageType.Primary}];
+        ArtworkGuard.EnsureAvailable(m); Assert(m.ImageInfos.Length==1);
+    })),
     ("Unrelated metadata change fails verification and stops later writes", async () => {
         using var f=new Fixture(); f.Add(Movie()); f.Add(Movie()); f.Items.OnSave=m=>m.CustomRating="unexpected";
         await Throws<InvalidOperationException>(()=>f.Run()); Assert(f.Items.Writes==1 && f.State.LoadCompleted().Count==0);
@@ -263,6 +348,19 @@ sealed class Fixture : IDisposable
     public FakeItems Items {get;}=new(); public FakeLookup Lookup {get;}=new(); public StateStore State {get;} public MetadataTaskService Service {get;}
     public Fixture(){State=new(Path);Service=new(Items,Lookup,State,NullLogger<MetadataTaskService>.Instance);}
     public void Add(BaseItem item)=>Items.Data.Add(item.Id,item);
+    public void AssignArtwork(BaseItem item,bool incomplete=true)
+    {
+        var folder=System.IO.Path.Combine(Path,"art",item.Id.ToString("N"));
+        (string Name,ImageType Type)[] files=[("poster.jpg",ImageType.Primary),("backdrop.jpg",ImageType.Backdrop),
+            ("extrafanart/fanart1.jpg",ImageType.Backdrop),("extrafanart/fanart2.jpg",ImageType.Backdrop),("extrafanart/fanart3.jpg",ImageType.Backdrop),
+            ("fanart.jpg",ImageType.Backdrop),("logo.svg",ImageType.Logo),("landscape.jpg",ImageType.Thumb)];
+        item.ImageInfos=files.Select(file=>new ItemImageInfo{Path=System.IO.Path.Combine(folder,file.Name),Type=file.Type}).ToArray();
+        foreach(var image in item.ImageInfos)
+        {
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(image.Path)!);
+            if(!incomplete || System.IO.Path.GetFileName(image.Path) is not ("fanart.jpg" or "logo.svg")) File.WriteAllText(image.Path,"fixture");
+        }
+    }
     public Task Run(bool preview=false,int limit=25,int max=80,bool updateText=true,CancellationToken token=default) => Service.Run(new(preview,[Guid.NewGuid()],updateText,true,false,[],limit,max,0,30,30),new Progress<double>(),token);
     public RunReport Report()=>JsonSerializer.Deserialize<RunReport>(State.ReadReport())!;
     public JsonElement[] JournalEntries()=>File.ReadAllLines(Directory.GetFiles(System.IO.Path.Combine(Path,"journals")).Single())
@@ -273,11 +371,15 @@ sealed class FakeItems : IItemStore
 {
     public bool Busy {get;set;} public int Writes {get;private set;} public Dictionary<Guid,BaseItem> Data {get;}=[]; public Action<BaseItem>? OnSave {get;set;}
     public bool VerifyAtStore {get;set;}
+    public bool CheckImageFiles {get;set;}
+    public Action<BaseItem>? BeforeSave {get;set;}
     public IEnumerable<WorkItem> Inventory(RunOptions o,CancellationToken t)=>Data.Keys.Select(id=>new WorkItem(id,null));
     public BaseItem? Read(Guid id)=>Data.GetValueOrDefault(id);
+    public void CheckCanSave(BaseItem item) { if(CheckImageFiles)ArtworkGuard.EnsureAvailable(item); }
     public Task Save(BaseItem item,TextChange c,CancellationToken t)
     {
         t.ThrowIfCancellationRequested(); if(Busy)throw new InvalidOperationException("Busy");
+        BeforeSave?.Invoke(item);CheckCanSave(item);
         var before=Rules.Snapshot(item);var protectedBefore=Rules.ProtectedMetadata(item);
         item.Name=c.Name!;item.Overview=c.Overview!;item.PreferredMetadataLanguage=c.Language!;Writes++;OnSave?.Invoke(item);
         if(VerifyAtStore)Rules.Verify(before,protectedBefore,c,Read(item.Id));
@@ -289,4 +391,14 @@ sealed class FakeLookup : ITextLookup
     public int Calls {get;private set;} public Guid LastId {get;private set;} public Action? OnFetch {get;set;} public Func<Task>? Wait {get;set;}
     public LocalizedText? Result {get;set;}=new("Titre français","Résumé français","fake");
     public async Task<LocalizedText?> Fetch(BaseItem item,int timeout,CancellationToken t) {Calls++;LastId=item.Id;OnFetch?.Invoke();if(Wait is not null)await Wait();return Result;}
+}
+
+public class InterfaceStub : DispatchProxy
+{
+    public Func<MethodInfo,object?[]?,object?> Handler {get;set;} = (_,_)=>throw new NotImplementedException();
+    public static T Make<T>(Func<MethodInfo,object?[]?,object?> handler) where T:class
+    {
+        var proxy=Create<T,InterfaceStub>(); ((InterfaceStub)(object)proxy).Handler=handler; return proxy;
+    }
+    protected override object? Invoke(MethodInfo? targetMethod,object?[]? args)=>Handler(targetMethod!,args);
 }

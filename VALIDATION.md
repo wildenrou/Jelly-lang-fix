@@ -1,5 +1,16 @@
 # Validation — French Originals
 
+## Version 1.0.3.0 — 2026-09-23 UTC
+
+- **49/49 tests passed**, compiled with .NET SDK 10.0.401 against the locked Jellyfin 12.0.0 dependencies. Warnings are treated as errors.
+- A fixture starts with eight image references and six existing files. Calling the actual Jellyfin `BaseItem.ValidateImages()` removes exactly the two missing references, reproducing the supplied journal's shape. This demonstrates the missing-file cleanup mechanism; it is not a direct filesystem check on the user's server.
+- The production `JellyfinAdapter.Save` is exercised with interface stubs that reject any save call. With unavailable artwork, it throws the pre-save skip before changing cached text or image references.
+- Batch tests verify zero writes for affected items, successful updates of later items, clear preview/report/audit output, retry after file restoration, fairness with a one-item limit, a second check if a file disappears before store assignment, and strict failure if artwork changes during a save. Already-matching items remain hidden, and remote image URLs are not misclassified as local files.
+- DLL SHA-256: `609138835808e5744dbd4a0a68537dba522756bc3abbf4adc2e2fc6e9a5232f6`.
+- The configuration page is unchanged. Full disposable-server integration was not rerun, and this build has not been deployed to the user's server here.
+
+The supplied production journal shows that the proposed text matched its read-back values and that two local-image references disappeared. This matches the cleanup path in [LibraryManager.UpdateImagesAsync](https://github.com/jellyfin/jellyfin/blob/v12.1/Emby.Server.Implementations/Library/LibraryManager.cs) and [BaseItem.ValidateImages](https://github.com/jellyfin/jellyfin/blob/v12.1/MediaBrowser.Controller/Entities/BaseItem.cs). Version 1.0.3 checks the same `IsLocalFile` and `File.Exists` condition before saving, without mutating artwork. Missing-file and inaccessible-file conditions are deliberately reported together because `File.Exists` does not distinguish them reliably. The guard does not relax post-save verification or attempt an artwork repair.
+
 ## Version 1.0.2.0 — 2026-09-23 UTC
 
 - **39/39 safety and reporting tests passed**, using the official Jellyfin 12.0.0 entity types and .NET SDK 10.0.401. The five added image regressions cover order-independent fingerprints without mutation, successful verified saves after image reordering, repeat-run idempotence, retained legacy completion history, and detection of real artwork changes. One case independently exercises removal, addition, replacement, type change, case change, and duplicate addition; each still stops after one write without a completion marker.
