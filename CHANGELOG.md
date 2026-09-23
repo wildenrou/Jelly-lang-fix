@@ -7,6 +7,7 @@
 - Record exact expected/actual field differences when a stored item fails verification, and include the failed item in the report.
 - Capture protected-field values in the pre-write audit record. Retain the existing strict verification and immediate batch stop.
 - Publish the source, Jellyfin repository catalog, installation downloads, and original French Originals logo.
+- Correct the package's license label to match the bundled GPL version 2 text.
 
 Known issue: a real-library verification mismatch reported with version 1.0.0 could not be diagnosed from its hash-only journal. This version supplies the missing evidence; the underlying cause is not yet confirmed. It is not a verified fix for that server mismatch.
 

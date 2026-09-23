@@ -96,7 +96,7 @@ dotnet run --project tests/FrenchOriginals.Tests -c Release
 python3 package.py
 ```
 
-The plugin references Jellyfin's official 12.0.0 NuGet packages. Its ZIP contains only its own DLL and plugin metadata; Jellyfin supplies the framework and host assemblies. Keep the source and license alongside any redistribution. The code is licensed GPL-3.0-only.
+The plugin references Jellyfin's official 12.0.0 NuGet packages. Its ZIP contains only its own DLL, plugin metadata, logo, and documentation; Jellyfin supplies the framework and host assemblies. Keep the source and license alongside any redistribution. The code is licensed GPL-2.0-only, matching the bundled LICENSE.
 
 The repository contains the corresponding 1.0.1 source. The catalog also retains the original 1.0.0 binary for existing installations, with its [exact source archive](dist/FrenchOriginals-1.0.0-source.zip). The logo is original generated artwork provided with the project.
 

@@ -5,7 +5,7 @@
 - Release assembly compiled with .NET SDK **10.0.401**, targeting **net10.0**, using the locked official Jellyfin **12.0.0** NuGet dependencies. Warnings are treated as errors.
 - **34/34 safety and reporting tests passed.** In addition to the original 26 cases below, tests verify hidden unchanged rows in preview/apply, completion tracking without a write, summary-only and language-only reporting, accurate preview labels, store-side verification diagnostics, missing read-back items, and save exceptions. The protected-field failure test now checks exact expected/actual values and the failed report row.
 - The jsdom configuration-page check passed, including old unchanged-row suppression on refresh, duplicate-title suppression, and safe text rendering.
-- DLL SHA-256: `bcb5dbe315afeee0323ecaaee6d06a4fcd771024beb81494786f2a6bf0f6c129`.
+- DLL SHA-256: `ef677f0d461655b7bdff4ec7011250052c18e6090580c3ffad4e266cbfe81739`.
 
 The native server tests described below were run for **1.0.0**, not repeated for this update. Version 1.0.1 has not been deployed to the reporting user's server. The real-library verification failure remains unresolved: the old journal contained the proposed values and a protected-field hash but omitted the actual mismatched fields. This update adds that evidence without relaxing checks or claiming a confirmed root-cause fix.
 
