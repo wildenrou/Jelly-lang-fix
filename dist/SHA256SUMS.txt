@@ -1,0 +1,3 @@
+a4fa3b8acaef89d1e3f80000fff8fcab287e6f03e34d2bb0d069a60c80671b9b  FrenchOriginals-1.0.1.zip
+be0857ed238e333a31ee4faa2ba2d247431960beb9c5f4c33cea0d8600e2d032  FrenchOriginals-1.0.1-jellyfin12.zip
+573202a6a96b85979c305a3b96756189709bc846d564290faf392074d4e13acc  FrenchOriginals-1.0.0.zip

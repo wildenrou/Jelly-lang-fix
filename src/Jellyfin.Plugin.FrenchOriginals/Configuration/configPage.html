@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>French Originals</title></head>
+<body>
+<div id="FrenchOriginalsPage" data-role="page" class="page type-interior pluginConfigurationPage"
+     data-require="emby-input,emby-button,emby-checkbox">
+  <div data-role="content"><div class="content-primary">
+    <h2>French Originals</h2>
+    <p>French titles and summaries for films and shows whose original language is French.
+      French audio tracks alone do not qualify a title.</p>
+    <form id="FrenchOriginalsForm">
+      <div class="checkboxContainer checkboxContainer-withDescription">
+        <label><input is="emby-checkbox" type="checkbox" id="PreviewOnly"><span>Preview only</span></label>
+        <div class="fieldDescription">Shows proposed changes without saving library metadata. Start here.</div>
+      </div>
+      <h3>Libraries</h3><div id="FrenchLibraries">Loading…</div>
+      <p class="fieldDescription">Only checked libraries are processed. Select at least one.</p>
+      <div class="checkboxContainer"><label><input is="emby-checkbox" type="checkbox" id="UpdateTitlesAndSummaries"><span>Update titles and summaries from enabled metadata providers</span></label></div>
+      <div class="checkboxContainer"><label><input is="emby-checkbox" type="checkbox" id="IncludeSeasonsAndEpisodes"><span>Include seasons and episodes of French-original shows</span></label></div>
+      <p class="fieldDescription">Locked items are skipped. Individual title and summary locks are respected.
+        Seasons and episodes with an explicit non-French language preference are skipped.
+        French text depends on the provider; missing translations may fall back to the provider's default.</p>
+      <div class="inputContainer"><label class="inputLabel" for="ItemLimit">Items per run</label><input is="emby-input" id="ItemLimit" type="number" min="0" required><div class="fieldDescription">Default 25. Completed items are skipped on later runs. 0 selects all candidates.</div></div>
+      <div class="inputContainer"><label class="inputLabel" for="MaxChanges">Maximum selected items allowed in apply mode</label><input is="emby-input" id="MaxChanges" type="number" min="1" required><div class="fieldDescription">The task stops before any library writes if the selected count exceeds this guard. Default 80.</div></div>
+      <details><summary>Advanced</summary>
+        <div class="inputContainer"><label class="inputLabel" for="ItemIds">Exact item IDs (optional)</label><input is="emby-input" id="ItemIds" type="text"><div class="fieldDescription">Separate by commas or spaces. A series ID selects only that series, not its children.</div></div>
+        <div class="checkboxContainer"><label><input is="emby-checkbox" type="checkbox" id="RecheckCompletedItems"><span>Recheck completed items on every run</span></label></div>
+        <div class="inputContainer"><label class="inputLabel" for="DelayMilliseconds">Delay between items (milliseconds)</label><input is="emby-input" id="DelayMilliseconds" type="number" min="0" max="10000" required></div>
+        <div class="inputContainer"><label class="inputLabel" for="ProviderTimeoutSeconds">Timeout per metadata provider (seconds)</label><input is="emby-input" id="ProviderTimeoutSeconds" type="number" min="5" max="300" required></div>
+        <div class="inputContainer"><label class="inputLabel" for="JournalRetentionDays">Audit retention (days)</label><input is="emby-input" id="JournalRetentionDays" type="number" min="1" max="3650" required></div>
+      </details>
+      <p><button is="emby-button" type="submit" class="raised button-submit block"><span>Save settings</span></button></p>
+    </form>
+    <p><button is="emby-button" type="button" id="RunFrenchTask" class="raised">Run with saved settings</button>
+      <button is="emby-button" type="button" id="RefreshFrenchReport" class="raised">Refresh report</button></p>
+    <p>For scheduling or cancellation, use Dashboard → Scheduled Tasks → French Originals — update metadata.</p>
+    <h3>Last run</h3><div id="FrenchStatus" role="status"></div>
+    <div style="overflow:auto"><table class="tbl" style="width:100%"><thead><tr><th>Item</th><th>Type</th><th>Result</th><th>New title / detail</th></tr></thead><tbody id="FrenchRows"></tbody></table></div>
+    <p class="fieldDescription">Unchanged items are hidden. Summary and language preference updates are shown without repeating an unchanged title. The report shows up to 200 items. Full audit journals are kept in Jellyfin's data/FrenchOriginals/journals directory.</p>
+  </div></div>
+  <script>
+  (function () {
+    'use strict';
+    var id = '8a18225a-22b8-4e18-9921-b8f1b5900bbc';
+    var page = document.querySelector('#FrenchOriginalsPage');
+    var bools = ['PreviewOnly','UpdateTitlesAndSummaries','IncludeSeasonsAndEpisodes','RecheckCompletedItems'];
+    var nums = ['ItemLimit','MaxChanges','DelayMilliseconds','ProviderTimeoutSeconds','JournalRetentionDays'];
+    var config = null;
+    function q(s) { return page.querySelector(s); }
+    function normalize(value) {
+      if (Array.isArray(value)) return value.map(normalize);
+      if (!value || typeof value !== 'object') return value;
+      var output = {};
+      Object.keys(value).forEach(function(k) { output[k.charAt(0).toUpperCase() + k.slice(1)] = normalize(value[k]); });
+      return output;
+    }
+    function request(method,path,body) {
+      var options = {type:method,url:ApiClient.getUrl(path),headers:{Accept:'application/json; profile="PascalCase"'}};
+      if (method === 'GET') options.dataType = 'json';
+      if (body !== undefined) { options.contentType = 'application/json'; options.data = JSON.stringify(body); }
+      return ApiClient.ajax(options).then(normalize);
+    }
+    function error(e) { q('#FrenchStatus').textContent = 'Request failed. Check your administrator session and Jellyfin log.'; console.error(e); }
+    function report() {
+      return request('GET','FrenchOriginals/Report').then(function(r) {
+        q('#FrenchStatus').textContent = r.Status + (r.Message ? ': ' + r.Message : '') + (r.StartedUtc ? ' — ' + new Date(r.StartedUtc).toLocaleString() : '');
+        var body = q('#FrenchRows'); body.replaceChildren();
+        (r.Items || []).forEach(function(row) {
+          // Also clean up reports saved by older plugin versions.
+          if (row.Action === 'No change needed') return;
+          var tr = document.createElement('tr');
+          var newTitle = row.NewTitle && row.NewTitle !== row.Title ? row.NewTitle : '';
+          var detail = [newTitle, row.Detail].filter(Boolean).join(' · ');
+          [row.Title || row.Id,row.Type,row.Action,detail].forEach(function(value) {
+            var td = document.createElement('td'); td.textContent = value || ''; td.style.padding = '.5em'; tr.appendChild(td);
+          }); body.appendChild(tr);
+        });
+      });
+    }
+    page.addEventListener('pageshow', function() {
+      Dashboard.showLoadingMsg();
+      Promise.all([request('GET','Plugins/' + id + '/Configuration'),request('GET','Library/VirtualFolders')]).then(function(results) {
+        config = results[0];
+        bools.forEach(function(k) { q('#'+k).checked = !!config[k]; });
+        nums.forEach(function(k) { q('#'+k).value = config[k]; });
+        q('#ItemIds').value = config.ItemIds || '';
+        var box = q('#FrenchLibraries'); box.replaceChildren();
+        results[1].forEach(function(folder) {
+          var label = document.createElement('label'); label.style.display = 'block'; label.style.padding = '.4em 0';
+          var input = document.createElement('input'); input.type = 'checkbox'; input.value = folder.ItemId; input.className = 'frenchLibrary';
+          input.checked = (config.LibraryIds || []).some(function(v) { return v.replace(/-/g,'').toLowerCase() === folder.ItemId.replace(/-/g,'').toLowerCase(); });
+          label.appendChild(input); label.appendChild(document.createTextNode(' ' + folder.Name)); box.appendChild(label);
+        });
+        return report();
+      }).catch(error).finally(function() { Dashboard.hideLoadingMsg(); });
+    });
+    q('#FrenchOriginalsForm').addEventListener('submit', function(e) {
+      e.preventDefault(); if (!config) return;
+      bools.forEach(function(k) { config[k] = q('#'+k).checked; });
+      nums.forEach(function(k) { config[k] = Number(q('#'+k).value); });
+      config.ItemIds = q('#ItemIds').value.trim();
+      config.LibraryIds = Array.from(page.querySelectorAll('.frenchLibrary:checked')).map(function(x) { return x.value; });
+      if (!config.LibraryIds.length) { q('#FrenchStatus').textContent = 'Choose at least one library.'; return; }
+      Dashboard.showLoadingMsg();
+      request('POST','Plugins/' + id + '/Configuration',config).then(Dashboard.processPluginConfigurationUpdateResult).catch(error).finally(function() { Dashboard.hideLoadingMsg(); });
+    });
+    q('#RunFrenchTask').addEventListener('click', function() {
+      var button = this; button.disabled = true;
+      request('GET','ScheduledTasks').then(function(tasks) {
+        var task = tasks.find(function(t) { return t.Key === 'FrenchOriginals.UpdateMetadata'; });
+        if (!task) throw new Error('Task not found');
+        if (task.State === 'Running' || task.State === 'Cancelling') { q('#FrenchStatus').textContent = 'The task is already running.'; return; }
+        return request('POST','ScheduledTasks/Running/' + task.Id).then(function() { q('#FrenchStatus').textContent = 'Task started with saved settings. Click Refresh report to see progress.'; });
+      }).catch(error).finally(function() { button.disabled = false; });
+    });
+    q('#RefreshFrenchReport').addEventListener('click', function() { report().catch(error); });
+  }());
+  </script>
+</div>
+</body></html>

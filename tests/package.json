@@ -1,0 +1,1 @@
+{"name":"french-originals-ui-tests","private":true,"scripts":{"test":"node ui-test.cjs"},"devDependencies":{"jsdom":"26.1.0"}}

@@ -1,0 +1,15 @@
+# Changes
+
+## 1.0.1.0 — 2026-09-23 — diagnostic beta
+
+- Hide items that need no changes from preview and apply reports. Report refresh also filters unchanged rows from older saved reports.
+- Show a new title only when the title changes. Label summary and language preference updates explicitly.
+- Record exact expected/actual field differences when a stored item fails verification, and include the failed item in the report.
+- Capture protected-field values in the pre-write audit record. Retain the existing strict verification and immediate batch stop.
+- Publish the source, Jellyfin repository catalog, installation downloads, and original French Originals logo.
+
+Known issue: a real-library verification mismatch reported with version 1.0.0 could not be diagnosed from its hash-only journal. This version supplies the missing evidence; the underlying cause is not yet confirmed. It is not a verified fix for that server mismatch.
+
+## 1.0.0.0 — 2026-09-22
+
+- Initial native Jellyfin 12 plugin with French-original selection, provider ID matching, preview, scope and batch controls, completion tracking, audit journaling, and scheduled/on-demand execution.
