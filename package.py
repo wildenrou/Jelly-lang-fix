@@ -9,6 +9,7 @@ import zipfile
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--legacy-dll', type=Path, help='Optional verified 1.0.0 DLL to include as a legacy catalog version')
+parser.add_argument('--package-ref', default='main', help='Commit containing these package bytes; pin published catalog downloads to it')
 args = parser.parse_args()
 root = Path(__file__).resolve().parent
 out = root / 'artifacts'
@@ -23,7 +24,7 @@ dll = project / 'bin/Release/net10.0/Jellyfin.Plugin.FrenchOriginals.dll'
 if not dll.is_file():
     raise SystemExit('Build the Release configuration first.')
 logo = root / 'assets/french-originals-logo.png'
-repo_url = 'https://raw.githubusercontent.com/wildenrou/Jelly-lang-fix/main'
+repo_url = 'https://raw.githubusercontent.com/wildenrou/Jelly-lang-fix/' + args.package_ref
 description = ('French titles and summaries for French-original films and television. '
                'Diagnostic beta: a reported real-library read-back mismatch remains under investigation. '
                'Start in preview mode; verification failures stop the batch.')

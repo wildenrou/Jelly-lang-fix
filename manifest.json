@@ -6,13 +6,13 @@
     "description": "French titles and summaries for French-original films and television. Diagnostic beta: a reported real-library read-back mismatch remains under investigation. Start in preview mode; verification failures stop the batch.",
     "owner": "wildenrou",
     "category": "Metadata",
-    "imageUrl": "https://raw.githubusercontent.com/wildenrou/Jelly-lang-fix/main/assets/french-originals-logo.png",
+    "imageUrl": "https://raw.githubusercontent.com/wildenrou/Jelly-lang-fix/84eea2b67bdb14f175e806a49ec028d2d6e8f8ba/assets/french-originals-logo.png",
     "versions": [
       {
         "version": "1.0.1.0",
         "targetAbi": "12.0.0.0",
         "changelog": "Diagnostic beta. Hide unchanged report rows; identify title, summary, and language changes; journal exact expected/actual verification differences. The reported server mismatch is not yet confirmed fixed.",
-        "sourceUrl": "https://raw.githubusercontent.com/wildenrou/Jelly-lang-fix/main/dist/FrenchOriginals-1.0.1.zip",
+        "sourceUrl": "https://raw.githubusercontent.com/wildenrou/Jelly-lang-fix/84eea2b67bdb14f175e806a49ec028d2d6e8f8ba/dist/FrenchOriginals-1.0.1.zip",
         "checksum": "d6209f48e7e726d4d4706ed14a153346",
         "timestamp": "2026-09-23T00:00:00Z"
       },
@@ -20,7 +20,7 @@
         "version": "1.0.0.0",
         "targetAbi": "12.0.0.0",
         "changelog": "Initial beta. A reported read-back mismatch remains under investigation. Use 1.0.1 or later for detailed verification diagnostics.",
-        "sourceUrl": "https://raw.githubusercontent.com/wildenrou/Jelly-lang-fix/main/dist/FrenchOriginals-1.0.0.zip",
+        "sourceUrl": "https://raw.githubusercontent.com/wildenrou/Jelly-lang-fix/84eea2b67bdb14f175e806a49ec028d2d6e8f8ba/dist/FrenchOriginals-1.0.0.zip",
         "checksum": "1f50d99e05f9f61ea7b726c3d983ab95",
         "timestamp": "2026-09-22T00:00:00Z"
       }
