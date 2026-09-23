@@ -3,11 +3,19 @@
     "guid": "8a18225a-22b8-4e18-9921-b8f1b5900bbc",
     "name": "French Originals",
     "overview": "French-original metadata updates with preview, clear reports, and audit logging.",
-    "description": "French titles and summaries for French-original films and television. Beta: corrects false verification failures from image-list ordering while retaining artwork checks. Start in preview mode; verification failures stop the batch.",
+    "description": "French titles and summaries for French-original films and television. Beta: skips items with unavailable local artwork before saving and continues the batch. Start in preview mode; verification failures stop the batch.",
     "owner": "wildenrou",
     "category": "Metadata",
-    "imageUrl": "https://raw.githubusercontent.com/wildenrou/Jelly-lang-fix/60aef7bce91a7c88809b21a95b71e6df878c3a5c/assets/french-originals-logo.png",
+    "imageUrl": "https://raw.githubusercontent.com/wildenrou/Jelly-lang-fix/2d8810d79a672a2df10b3ceae9ee00a892b59704/assets/french-originals-logo.png",
     "versions": [
+      {
+        "version": "1.0.3.0",
+        "targetAbi": "12.0.0.0",
+        "changelog": "Skip items with missing or inaccessible local artwork before saving; continue the batch and retry after repair. Show filenames in reports and full paths in audit entries. Preserve strict post-save verification and completion history.",
+        "sourceUrl": "https://raw.githubusercontent.com/wildenrou/Jelly-lang-fix/2d8810d79a672a2df10b3ceae9ee00a892b59704/dist/FrenchOriginals-1.0.3.zip",
+        "checksum": "0af861369f6f2b00a071aafef97427c0",
+        "timestamp": "2026-09-23T00:00:00Z"
+      },
       {
         "version": "1.0.2.0",
         "targetAbi": "12.0.0.0",
